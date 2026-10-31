@@ -165,3 +165,15 @@ Supply the same tool objects used by the provider so the patcher can inspect the
 | `mcp-annotations`         | 0.9.x / 0.9.0   |
 | `mcp-core`                | 1.0.x / 1.0.1   |
 | Kotlin compiler / runtime | 1.9.25 baseline |
+
+Spring AI 2.0.0-M7 includes Kotlin property nullability support
+([#5978](https://github.com/spring-projects/spring-ai/commit/e1cc9ebe7)), including required-property
+and nullable-value checks when Kotlin reflection is available. Nullable parameters without
+an explicit required annotation are also optional. However, `@McpToolParam` takes precedence
+over nullability: its default `required = true` keeps an annotated nullable parameter required
+([schema generator](https://github.com/spring-projects/spring-ai/blob/v2.0.0-M7/mcp/mcp-annotations/src/main/java/org/springframework/ai/mcp/annotation/method/tool/utils/McpJsonSchemaGenerator.java)).
+
+When migrating to Spring AI's schema generator, this patcher can be removed after confirming
+that nullable inputs are optional and nullable output properties accept `null`.
+Applications using the standalone `mcp-annotations` 0.9.0 provider shown above still require
+this patcher; upgrading Spring AI alone does not update that provider's schema generation.

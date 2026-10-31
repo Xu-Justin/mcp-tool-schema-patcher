@@ -122,3 +122,9 @@ var specs = ToolSchemaDefsPatcher.patch(provider.getToolSpecifications());
 | Spring Boot / Spring AI | 3.5.x / 1.1.x   |
 | `mcp-annotations`       | 0.9.x / 0.9.0   |
 | `mcp-core`              | 1.0.x / 1.0.1   |
+
+This issue is resolved in Spring AI 2.0.0-M7 ([#6035](https://github.com/spring-projects/spring-ai/commit/0f9c2a5d7)).
+When migrating to Spring AI's schema generator, this patcher can be removed after confirming
+that generated input schema references resolve correctly. Applications using the standalone
+`mcp-annotations` 0.9.0 provider shown above still require this patcher; upgrading Spring AI alone
+does not update that provider's schema generation.
