@@ -82,10 +82,12 @@ object ToolSchemaNullabilityPatcher {
       val context = Context(
         listOfNotNull(schema["\$defs"].asMutableMap(), defs),
         listOfNotNull(schema["definitions"].asMutableMap(), definitions),
-        widenNullable = false,
       )
       patchNode(schema, parameter.type, context)
-      if (parameter.type.isMarkedNullable) required?.remove(name)
+      if (parameter.type.isMarkedNullable) {
+        required?.remove(name)
+        properties?.set(name, widenToNullable(schema))
+      }
     }
     val patchedInputSchema = McpSchema.JsonSchema(
       inputSchema.type(),
@@ -99,7 +101,6 @@ object ToolSchemaNullabilityPatcher {
       val context = Context(
         listOfNotNull(schema["\$defs"].asMutableMap()),
         listOfNotNull(schema["definitions"].asMutableMap()),
-        widenNullable = true,
       )
       patchNode(schema, function.returnType, context)
     }
@@ -117,7 +118,6 @@ object ToolSchemaNullabilityPatcher {
   private class Context(
     private val defs: List<Map<String, Any?>>,
     private val definitions: List<Map<String, Any?>>,
-    val widenNullable: Boolean,
   ) {
     private val visitedRefs = mutableSetOf<String>()
 
@@ -171,13 +171,12 @@ object ToolSchemaNullabilityPatcher {
       patchNode(schema, propertyType, context)
       if (propertyType.isMarkedNullable) {
         required?.remove(name)
-        if (context.widenNullable) properties[name] = widenToNullable(schema)
+        properties[name] = widenToNullable(schema)
       }
     }
     if (required?.isEmpty() == true) node.remove("required")
   }
 
-  // Resolve wrapper properties such as Page<T>.data before descending into their schemas.
   private fun resolveType(type: KType, bindings: Map<KTypeParameter, KType>): KType {
     val classifier = type.classifier
     if (classifier is KTypeParameter) {
