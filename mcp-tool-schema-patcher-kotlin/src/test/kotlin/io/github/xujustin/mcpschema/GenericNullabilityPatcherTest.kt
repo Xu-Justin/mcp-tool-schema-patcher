@@ -26,17 +26,17 @@ import org.junit.jupiter.api.Assertions.assertFalse
 
 class GenericNullabilityPatcherTest {
 
-  data class Mapping(val providerHotelId: String, val providerHotelName: String? = null)
-  data class Count<T>(val data: T? = null)
-  data class Applicable<T>(val data: T? = null)
-  data class Content(
-    val hotelMappingStatuses: Count<List<Mapping>>,
-    val nested: Applicable<Count<List<Mapping>>>,
+  data class Item(val id: String, val name: String? = null)
+  data class Page<T>(val data: T? = null)
+  data class Result<T>(val data: T? = null)
+  data class Response(
+    val items: Page<List<Item>>,
+    val nested: Result<Page<List<Item>>>,
   )
 
   class Tools {
     @McpTool(name = "generic_results", description = "Generic results", generateOutputSchema = true)
-    fun results(content: Content): Content = content
+    fun results(response: Response): Response = response
   }
 
   @Test
@@ -47,18 +47,18 @@ class GenericNullabilityPatcherTest {
     val originalJson = mapper.writeValueAsString(original.single().tool())
     val patched = ToolSchemaNullabilityPatcher.patch(tools, ToolSchemaDefsPatcher.patch(original)).single().tool()
     val validator = McpJsonDefaults.getSchemaValidator()
-    val nullableMapping = mapOf("providerHotelId" to "hotel-1", "providerHotelName" to null)
-    fun content(mapping: Map<String, Any?>) = mapOf(
-      "hotelMappingStatuses" to mapOf("data" to listOf(mapping)),
-      "nested" to mapOf("data" to mapOf("data" to listOf(mapping))),
+    val nullableItem = mapOf("id" to "item-1", "name" to null)
+    fun response(item: Map<String, Any?>) = mapOf(
+      "items" to mapOf("data" to listOf(item)),
+      "nested" to mapOf("data" to mapOf("data" to listOf(item))),
     )
 
-    val output = validator.validate(patched.outputSchema(), content(nullableMapping))
+    val output = validator.validate(patched.outputSchema(), response(nullableItem))
     assertTrue(output.valid(), output.errorMessage())
     val inputSchema = mapper.convertValue(patched.inputSchema(), object : TypeRef<Map<String, Any?>>() {})
-    val input = validator.validate(inputSchema, mapOf("content" to content(mapOf("providerHotelId" to "hotel-1"))))
+    val input = validator.validate(inputSchema, mapOf("response" to response(mapOf("id" to "item-1"))))
     assertTrue(input.valid(), input.errorMessage())
-    assertFalse(validator.validate(patched.outputSchema(), content(nullableMapping + ("providerHotelId" to null))).valid())
+    assertFalse(validator.validate(patched.outputSchema(), response(nullableItem + ("id" to null))).valid())
     assertEquals(mapper.writeValueAsString(original.single().tool()), originalJson)
   }
 }

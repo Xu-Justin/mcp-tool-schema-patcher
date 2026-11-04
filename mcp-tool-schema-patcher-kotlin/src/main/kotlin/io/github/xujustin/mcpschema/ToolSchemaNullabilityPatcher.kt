@@ -177,7 +177,7 @@ object ToolSchemaNullabilityPatcher {
     if (required?.isEmpty() == true) node.remove("required")
   }
 
-  // Resolve wrapper properties such as Count<T>.data before descending into their schemas.
+  // Resolve wrapper properties such as Page<T>.data before descending into their schemas.
   private fun resolveType(type: KType, bindings: Map<KTypeParameter, KType>): KType {
     val classifier = type.classifier
     if (classifier is KTypeParameter) {
