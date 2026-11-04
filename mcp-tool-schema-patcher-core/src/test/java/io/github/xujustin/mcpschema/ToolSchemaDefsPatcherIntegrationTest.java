@@ -19,6 +19,7 @@ package io.github.xujustin.mcpschema;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.server.McpStatelessServerFeatures;
+import io.modelcontextprotocol.spec.McpSchema;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
@@ -41,11 +42,30 @@ class ToolSchemaDefsPatcherIntegrationTest {
     var patchedSpecifications = ToolSchemaDefsPatcher.patch(specifications);
     var patchedCustomerTool = patchedSpecifications.get(0).tool();
 
-    var validation = McpJsonDefaults.getSchemaValidator()
-        .validate(toMap(patchedCustomerTool.inputSchema()), getCustomerArguments());
-    assertTrue(validation.valid(), validation.errorMessage());
+    assertToolCustomer(patchedCustomerTool, Map.of(
+        "billingAddress", Map.of("street", "123 Main Street"),
+        "shippingAddress", Map.of("street", "456 Oak Street")
+    ));
 
     assertEquals(originalToolsJson, serializeTools(specifications));
+  }
+
+  private static void assertToolCustomer(McpSchema.Tool tool, Map<String, Object> customer) {
+    assertTool(tool, Map.of("customer", customer), customer);
+  }
+
+  private static void assertTool(
+      McpSchema.Tool tool,
+      Map<String, Object> inputContent,
+      Map<String, Object> outputContent
+  ) {
+    var inputValidation = McpJsonDefaults.getSchemaValidator()
+        .validate(toMap(tool.inputSchema()), inputContent);
+    assertTrue(inputValidation.valid(), inputValidation.errorMessage());
+
+    var outputValidation = McpJsonDefaults.getSchemaValidator()
+        .validate(tool.outputSchema(), outputContent);
+    assertTrue(outputValidation.valid(), outputValidation.errorMessage());
   }
 
   private static String serializeTools(
@@ -54,16 +74,6 @@ class ToolSchemaDefsPatcherIntegrationTest {
     return McpJsonDefaults.getMapper().writeValueAsString(
         specifications.stream().map(McpStatelessServerFeatures.SyncToolSpecification::tool).toList()
     );
-  }
-
-  private static Map<String, Object> getCustomerArguments() {
-    var customer = new Customer();
-    customer.billingAddress = new Address();
-    customer.billingAddress.street = "123 Main Street";
-    customer.shippingAddress = new Address();
-    customer.shippingAddress.street = "456 Oak Street";
-
-    return toMap(Map.of("customer", customer));
   }
 
   private static Map<String, Object> toMap(Object value) {

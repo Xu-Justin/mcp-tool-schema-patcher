@@ -69,13 +69,20 @@ class ToolSchemaNullabilityPatcherIntegrationTest {
     customer: Map<String, Any?>,
     vararg parameters: Pair<String, Any?>,
   ) {
-    val inputContent = mapOf("customer" to customer) + parameters
+    assertTool(tool, mapOf("customer" to customer) + parameters, customer)
+  }
+
+  private fun assertTool(
+    tool: McpSchema.Tool,
+    inputContent: Map<String, Any?>,
+    outputContent: Map<String, Any?>,
+  ) {
     val inputValidation = McpJsonDefaults.getSchemaValidator()
       .validate(toMap(tool.inputSchema()), inputContent)
     assertTrue(inputValidation.valid(), inputValidation.errorMessage())
 
     val outputValidation = McpJsonDefaults.getSchemaValidator()
-      .validate(tool.outputSchema(), customer)
+      .validate(tool.outputSchema(), outputContent)
     assertTrue(outputValidation.valid(), outputValidation.errorMessage())
   }
 
