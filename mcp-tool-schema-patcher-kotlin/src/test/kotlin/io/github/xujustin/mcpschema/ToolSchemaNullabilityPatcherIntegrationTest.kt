@@ -18,6 +18,7 @@ package io.github.xujustin.mcpschema
 import io.modelcontextprotocol.json.McpJsonDefaults
 import io.modelcontextprotocol.json.TypeRef
 import io.modelcontextprotocol.server.McpStatelessServerFeatures.SyncToolSpecification
+import io.modelcontextprotocol.spec.McpSchema
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -34,32 +35,52 @@ class ToolSchemaNullabilityPatcherIntegrationTest {
     val specifications = provider.toolSpecifications
     val originalToolsJson = serializeTools(specifications)
 
-    val patchedSpecifications = ToolSchemaNullabilityPatcher.patch(toolObjects, specifications)
+    val patchedSpecifications = ToolSchemaNullabilityPatcher.patch(toolObjects, ToolSchemaDefsPatcher.patch(specifications))
     val patchedCustomerTool = patchedSpecifications.single().tool()
 
-    val inputValidation = McpJsonDefaults.getSchemaValidator()
-      .validate(toMap(patchedCustomerTool.inputSchema()), getCustomerArguments())
-    assertTrue(inputValidation.valid(), inputValidation.errorMessage())
+    // All fields exist and have values.
+    assertToolCustomer(patchedCustomerTool, mapOf(
+      "name" to "Justin",
+      "note" to "Customer note",
+      "items" to mapOf("data" to listOf(mapOf("id" to "item-1", "name" to "Item"))),
+      "nested" to mapOf("data" to mapOf("data" to listOf(mapOf("id" to "item-1", "name" to "Item")))),
+    ), "note" to "Customer note")
 
-    val outputValidation = McpJsonDefaults.getSchemaValidator()
-      .validate(patchedCustomerTool.outputSchema(), getCustomerOutput())
-    assertTrue(outputValidation.valid(), outputValidation.errorMessage())
+    // Nullable fields are explicitly null.
+    assertToolCustomer(patchedCustomerTool, mapOf(
+      "name" to "Justin",
+      "note" to null,
+      "items" to mapOf("data" to null),
+      "nested" to mapOf("data" to mapOf("data" to listOf(mapOf("id" to "item-1", "name" to null)))),
+    ), "note" to null)
+
+    // Nullable fields are omitted.
+    assertToolCustomer(patchedCustomerTool, mapOf(
+      "name" to "Justin",
+      "items" to emptyMap<String, Any?>(),
+      "nested" to mapOf("data" to mapOf("data" to listOf(mapOf("id" to "item-1")))),
+    ))
 
     assertEquals(originalToolsJson, serializeTools(specifications))
   }
 
+  private fun assertToolCustomer(
+    tool: McpSchema.Tool,
+    customer: Map<String, Any?>,
+    vararg parameters: Pair<String, Any?>,
+  ) {
+    val inputContent = mapOf("customer" to customer) + parameters
+    val inputValidation = McpJsonDefaults.getSchemaValidator()
+      .validate(toMap(tool.inputSchema()), inputContent)
+    assertTrue(inputValidation.valid(), inputValidation.errorMessage())
+
+    val outputValidation = McpJsonDefaults.getSchemaValidator()
+      .validate(tool.outputSchema(), customer)
+    assertTrue(outputValidation.valid(), outputValidation.errorMessage())
+  }
+
   private fun serializeTools(specifications: List<SyncToolSpecification>): String =
     McpJsonDefaults.getMapper().writeValueAsString(specifications.map { it.tool() })
-
-  private fun getCustomerArguments(): Map<String, Any?> {
-    val customer = Customer("Justin")
-    return mapOf("customer" to toMap(customer).filterValues { it != null })
-  }
-
-  private fun getCustomerOutput(): Map<String, Any?> {
-    val customer = Customer("Justin")
-    return toMap(customer)
-  }
 
   private fun toMap(value: Any): Map<String, Any?> =
     McpJsonDefaults.getMapper().convertValue(value, object : TypeRef<Map<String, Any?>>() {})
@@ -70,5 +91,14 @@ class ToolSchemaNullabilityPatcherIntegrationTest {
       customer.copy(note = note ?: customer.note)
   }
 
-  data class Customer(val name: String, val note: String? = null)
+  data class Customer(
+    val name: String,
+    val note: String? = null,
+    val items: Page<List<Item>>,
+    val nested: Result<Page<List<Item>>>,
+  )
+
+  data class Item(val id: String, val name: String? = null)
+  data class Page<T>(val data: T? = null)
+  data class Result<T>(val data: T? = null)
 }

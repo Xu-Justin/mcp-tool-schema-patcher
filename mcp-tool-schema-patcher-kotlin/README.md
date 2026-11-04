@@ -5,17 +5,17 @@ Repairs Kotlin nullability in MCP tool input and output schemas.
 ## Why do we need this?
 
 `mcp-annotations` generates schemas that can lose Kotlin `?` information.
-Nullable parameters and properties become required, and nullable output properties reject `null`.
+Nullable parameters and properties become required, and nullable input and output properties reject `null`.
 
 ## How do we solve this?
 
 `ToolSchemaNullabilityPatcher` reads the original Kotlin tool types and removes nullable
-parameters and properties from `required`. Nullable output properties also accept `null`
+parameters and properties from `required`. Nullable input parameters and object properties also accept `null`
 through `anyOf`. Original specifications, tool metadata, and call handlers are preserved.
 Java tools are returned unchanged.
 
-Nullable inputs become optional; explicit `null` is not added to their allowed types.
-Output null handling applies to object properties, not the return value itself or nullable
+Nullable inputs become optional and accept explicit `null`.
+Null handling applies to input parameters and object properties, not the return value itself or nullable
 collection elements and map values. This patcher does not repair definition references.
 
 ## Example
@@ -36,7 +36,7 @@ class MyTools {
 **Before:** both the `note` parameter and `Customer.note` are required despite being nullable.
 The output schema also rejects a customer whose `note` is `null`.
 
-**After:** the nullable parameter and property can be omitted. The output property also
+**After:** the nullable parameter and property can be omitted or explicitly `null`. The output property also
 accepts explicit `null`. The non-nullable `customer` parameter and `name` property stay required.
 
 ```diff
@@ -47,6 +47,10 @@ inputSchema.required
 inputSchema.properties.customer.required
 - ["name", "note"]
 + ["name"]
+
+inputSchema.properties.note / inputSchema.properties.customer.properties.note
+- {"type": "string"}
++ {"anyOf": [{"type": "string"}, {"type": "null"}]}
 
 outputSchema.required
 - ["name", "note"]
@@ -103,14 +107,14 @@ Only the schemas are shown below; handlers and tool metadata are unchanged.
       "customer": {
         "properties": {
           "name": {"type": "string"},
-          "note": {"type": "string"}
+          "note": {"anyOf": [{"type": "string"}, {"type": "null"}]}
         },
         "required": ["name"],
         "type": "object"
       },
       "note": {
         "description": "Optional note",
-        "type": "string"
+        "anyOf": [{"type": "string"}, {"type": "null"}]
       }
     },
     "required": ["customer"],
@@ -174,6 +178,6 @@ over nullability: its default `required = true` keeps an annotated nullable para
 ([schema generator](https://github.com/spring-projects/spring-ai/blob/v2.0.0-M7/mcp/mcp-annotations/src/main/java/org/springframework/ai/mcp/annotation/method/tool/utils/McpJsonSchemaGenerator.java)).
 
 When migrating to Spring AI's schema generator, this patcher can be removed after confirming
-that nullable inputs are optional and nullable output properties accept `null`.
+that nullable inputs are optional and nullable inputs and output properties accept `null`.
 Applications using the standalone `mcp-annotations` 0.9.0 provider shown above still require
 this patcher; upgrading Spring AI alone does not update that provider's schema generation.
