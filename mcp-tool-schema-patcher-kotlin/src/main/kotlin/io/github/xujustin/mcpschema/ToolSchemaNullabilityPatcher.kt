@@ -24,9 +24,13 @@ import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.KProperty1
 import kotlin.reflect.KType
+import kotlin.reflect.KTypeParameter
+import kotlin.reflect.KTypeProjection
+import kotlin.reflect.full.createType
 import kotlin.reflect.full.memberProperties
 import kotlin.reflect.full.primaryConstructor
 import kotlin.reflect.full.valueParameters
+import kotlin.reflect.full.withNullability
 import kotlin.reflect.jvm.javaField
 import kotlin.reflect.jvm.javaGetter
 import kotlin.reflect.jvm.kotlinFunction
@@ -148,11 +152,14 @@ object ToolSchemaNullabilityPatcher {
         node["additionalProperties"].asMutableMap()?.let { patchNode(it, valueType, context) }
       }
 
-      javaClass.isAnnotationPresent(Metadata::class.java) && !javaClass.isEnum -> patchObject(node, kClass, context)
+      javaClass.isAnnotationPresent(Metadata::class.java) && !javaClass.isEnum -> patchObject(node, type, kClass, context)
     }
   }
 
-  private fun patchObject(node: MutableMap<String, Any?>, kClass: KClass<*>, context: Context) {
+  private fun patchObject(node: MutableMap<String, Any?>, type: KType, kClass: KClass<*>, context: Context) {
+    val bindings = kClass.typeParameters.zip(type.arguments).mapNotNull { (parameter, argument) ->
+      argument.type?.let { parameter to it }
+    }.toMap()
     val properties = node["properties"].asMutableMap() ?: return
 
     @Suppress("UNCHECKED_CAST")
@@ -160,13 +167,28 @@ object ToolSchemaNullabilityPatcher {
     kClass.memberProperties.forEach { property ->
       val name = jsonName(kClass, property)
       val schema = properties[name].asMutableMap() ?: return@forEach
-      patchNode(schema, property.returnType, context)
-      if (property.returnType.isMarkedNullable) {
+      val propertyType = resolveType(property.returnType, bindings)
+      patchNode(schema, propertyType, context)
+      if (propertyType.isMarkedNullable) {
         required?.remove(name)
         if (context.widenNullable) properties[name] = widenToNullable(schema)
       }
     }
     if (required?.isEmpty() == true) node.remove("required")
+  }
+
+  // Resolve wrapper properties such as Count<T>.data before descending into their schemas.
+  private fun resolveType(type: KType, bindings: Map<KTypeParameter, KType>): KType {
+    val classifier = type.classifier
+    if (classifier is KTypeParameter) {
+      val bound = bindings[classifier] ?: return type
+      return bound.withNullability(type.isMarkedNullable || bound.isMarkedNullable)
+    }
+    if (classifier !is KClass<*> || type.arguments.isEmpty()) return type
+    val arguments = type.arguments.map { argument ->
+      argument.type?.let { KTypeProjection(argument.variance, resolveType(it, bindings)) } ?: argument
+    }
+    return if (arguments == type.arguments) type else classifier.createType(arguments, type.isMarkedNullable, type.annotations)
   }
 
   private fun jsonName(kClass: KClass<*>, property: KProperty1<*, *>): String {
